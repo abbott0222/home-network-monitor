@@ -1,0 +1,12 @@
+LAN
+ │
+ │ ARP Scan
+ ▼
+Python Network Monitor
+ │
+ │ Prometheus Metrics
+ ▼
+Prometheus
+ │
+ ▼
+Grafana Dashboard
