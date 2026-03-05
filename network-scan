@@ -1,0 +1,76 @@
+import time
+import yaml
+from scapy.all import ARP, Ether, srp
+from prometheus_client import start_http_server, Gauge
+from datetime import datetime
+
+# Prometheus metrics
+devices_detected = Gauge('home_network_devices_detected', 'Number of devices detected on the network')
+device_presence = Gauge('home_network_device_presence', 'Presence of known devices', ['device_name', 'ip'])
+scan_duration = Gauge('home_network_scan_duration_seconds', 'Network scan duration')
+
+# Load config
+with open("config.yaml") as f:
+    config = yaml.safe_load(f)
+
+network_cidr = config["network"]["cidr"]
+scan_interval = config["scan_interval"]
+known_devices = config["known_devices"]
+
+def scan_network():
+
+    start = time.time()
+
+    arp = ARP(pdst=network_cidr)
+    ether = Ether(dst="ff:ff:ff:ff:ff:ff")
+
+    packet = ether / arp
+
+    result = srp(packet, timeout=3, verbose=0)[0]
+
+    devices = []
+
+    for sent, received in result:
+        devices.append(received.psrc)
+
+    duration = time.time() - start
+    scan_duration.set(duration)
+
+    return devices
+
+def update_metrics(active_devices):
+
+    devices_detected.set(len(active_devices))
+
+    for name, ip in known_devices.items():
+
+        if ip in active_devices:
+            device_presence.labels(device_name=name, ip=ip).set(1)
+        else:
+            device_presence.labels(device_name=name, ip=ip).set(0)
+
+def main():
+
+    print("Starting Home Network Monitor")
+    print(f"Scanning {network_cidr}")
+
+    start_http_server(8000)
+
+    while True:
+
+        try:
+            active_devices = scan_network()
+            update_metrics(active_devices)
+
+            print(
+                f"{datetime.now()} - Devices detected: {len(active_devices)}"
+            )
+
+        except Exception as e:
+            print(f"Scan error: {e}")
+
+        time.sleep(scan_interval)
+
+
+if __name__ == "__main__":
+    main()
